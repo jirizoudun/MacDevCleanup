@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Mac Disk Space Cleanup Script
-# Created by Claude - Interactive script with confirmations and colored output
+# Interactive script with confirmations, colored output and config file support
 
 # Color definitions
 RED='\033[0;31m'
@@ -11,6 +11,10 @@ BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
+
+# Configuration file path
+CONFIG_FILE="$HOME/.mac-cleanup-config.json"
+DEFAULT_CONFIG_FILE="./mac-cleanup-config.json"
 
 # Functions
 print_header() {
@@ -67,12 +71,207 @@ check_command() {
   return 0
 }
 
+# Check if path is in safe list
+is_safe_path() {
+  local path="$1"
+  
+  # Expand home directory if needed
+  path="${path/#\~/$HOME}"
+  
+  # Basic safety checks
+  if [[ "$path" == "/" || 
+        "$path" == "/System" || 
+        "$path" == "/Library" || 
+        "$path" == "/Applications" || 
+        "$path" == "/Users" ||
+        "$path" == "/bin" ||
+        "$path" == "/sbin" ||
+        "$path" == "/usr" ]]; then
+    print_error "SAFETY CHECK FAILED: Cannot clean system directory $path"
+    return 1
+  fi
+  
+  # Check if path is under user home
+  if [[ "$path" == "$HOME"* ]]; then
+    # Additional safety checks for important user directories
+    if [[ "$path" == "$HOME" || 
+          "$path" == "$HOME/Documents" || 
+          "$path" == "$HOME/Desktop" || 
+          "$path" == "$HOME/Pictures" || 
+          "$path" == "$HOME/Music" || 
+          "$path" == "$HOME/Movies" ]]; then
+      print_error "SAFETY CHECK FAILED: Cannot clean important user directory $path"
+      return 1
+    fi
+    return 0
+  fi
+  
+  # Path is outside home directory - be extra cautious
+  print_warning "Path $path is outside your home directory"
+  if confirm "This is potentially dangerous. Are you ABSOLUTELY sure you want to proceed?"; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# Create default config file if it doesn't exist
+create_default_config() {
+  local config_file="$1"
+  
+  print_info "Creating default configuration file at $config_file"
+  
+  cat > "$config_file" << 'EOF'
+{
+  "cache_directories": [
+    {
+      "path": "~/Library/Caches/Google",
+      "description": "Google Cache (Chrome, etc.)",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/Yarn",
+      "description": "Yarn Package Manager Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/org.swift.swiftpm",
+      "description": "Swift Package Manager Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/typescript",
+      "description": "TypeScript Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/Arc",
+      "description": "Arc Browser Cache",
+      "enabled": true
+    }
+  ],
+  "developer_directories": [
+    {
+      "path": "~/Library/Developer/CoreSimulator/Caches",
+      "description": "iOS Simulator Caches",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Developer/Xcode/DerivedData",
+      "description": "Xcode Derived Data",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Developer/Xcode/Archives",
+      "description": "Xcode Archives",
+      "enabled": false
+    },
+    {
+      "path": "~/Library/Developer/XCPGDevices",
+      "description": "Xcode Testing Devices",
+      "enabled": true
+    }
+  ],
+  "application_support_directories": [
+    {
+      "path": "~/Library/Application Support/Caches",
+      "description": "Application Support Cache Folder",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Application Support/Google",
+      "description": "Google Application Data",
+      "enabled": false
+    }
+  ],
+  "android_directories": [
+    {
+      "path": "~/.android/cache",
+      "description": "Android Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/.gradle/caches",
+      "description": "Gradle Cache",
+      "enabled": true
+    }
+  ],
+  "device_support": {
+    "clean_ios_device_support": true,
+    "keep_latest_ios_versions": 2,
+    "clean_macos_device_support": true,
+    "keep_latest_macos_versions": 1
+  },
+  "android_sdk": {
+    "clean_build_tools": true,
+    "clean_platforms": true,
+    "clean_system_images": true
+  }
+}
+EOF
+
+  print_success "Default configuration file created"
+}
+
+# Load configuration
+load_config() {
+  local config_file="$1"
+  
+  if [ ! -f "$config_file" ]; then
+    print_warning "Configuration file not found at $config_file"
+    
+    if [ "$config_file" != "$DEFAULT_CONFIG_FILE" ] && [ -f "$DEFAULT_CONFIG_FILE" ]; then
+      print_info "Using default configuration file at $DEFAULT_CONFIG_FILE"
+      config_file="$DEFAULT_CONFIG_FILE"
+    else
+      if confirm "Do you want to create a default configuration file?"; then
+        if [ "$config_file" == "$CONFIG_FILE" ]; then
+          create_default_config "$config_file"
+        else
+          create_default_config "$DEFAULT_CONFIG_FILE"
+          config_file="$DEFAULT_CONFIG_FILE"
+        fi
+      else
+        print_error "Cannot continue without configuration file"
+        exit 1
+      fi
+    fi
+  fi
+  
+  # Check if jq is installed
+  if ! command -v jq &> /dev/null; then
+    print_error "jq is not installed. Cannot parse JSON configuration."
+    print_info "Install jq using: brew install jq"
+    print_info "Or manually edit the script to include your directories."
+    exit 1
+  fi
+  
+  print_info "Loading configuration from $config_file"
+  
+  # Validate JSON syntax
+  if ! jq empty "$config_file" 2>/dev/null; then
+    print_error "Invalid JSON syntax in configuration file"
+    exit 1
+  fi
+  
+  return 0
+}
+
 clean_directory() {
   local dir="$1"
   local description="$2"
   
+  # Expand home directory if needed
+  dir="${dir/#\~/$HOME}"
+  
   if [ ! -d "$dir" ]; then
     print_info "Directory $dir does not exist. Skipping."
+    return
+  fi
+  
+  # Safety check
+  if ! is_safe_path "$dir"; then
+    print_warning "Skipping $dir due to safety check"
     return
   fi
   
@@ -83,6 +282,10 @@ clean_directory() {
     if [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
       print_info "Directory is already empty. Skipping."
     else
+      if [[ -z "$dir" || "$dir" == "/" ]]; then
+        print_error "Invalid or empty directory path: '$dir'. Skipping."
+        return
+      fi
       rm -rf "$dir"/* 2>/dev/null
       if [ $? -eq 0 ]; then
         print_success "Successfully cleaned $dir"
@@ -99,8 +302,17 @@ clean_file() {
   local file="$1"
   local description="$2"
   
+  # Expand home directory if needed
+  file="${file/#\~/$HOME}"
+  
   if [ ! -f "$file" ]; then
     print_info "File $file does not exist. Skipping."
+    return
+  fi
+  
+  # Safety check
+  if ! is_safe_path "$file"; then
+    print_warning "Skipping $file due to safety check"
     return
   fi
   
@@ -119,12 +331,42 @@ clean_file() {
   fi
 }
 
+# Process directories from config file
+process_directory_section() {
+  local config_file="$1"
+  local section="$2"
+  
+  local count=$(jq ".$section | length" "$config_file")
+  
+  for (( i=0; i<$count; i++ )); do
+    local enabled=$(jq -r ".$section[$i].enabled" "$config_file")
+    
+    if [ "$enabled" = "true" ]; then
+      local path=$(jq -r ".$section[$i].path" "$config_file")
+      local description=$(jq -r ".$section[$i].description" "$config_file")
+      
+      clean_directory "$path" "$description"
+    fi
+  done
+}
+
 # Main script starts here
 print_header "MAC DISK SPACE CLEANUP SCRIPT"
 print_info "This script will help you clean up disk space on your Mac."
 print_warning "It will ask for confirmation before deleting any files."
-echo ""
 
+# Check if a custom config file was specified
+if [ "$1" != "" ]; then
+  CONFIG_FILE="$1"
+  print_info "Using custom configuration file: $CONFIG_FILE"
+fi
+
+# Load configuration
+if ! load_config "$CONFIG_FILE"; then
+  exit 1
+fi
+
+echo ""
 if ! confirm "Ready to proceed with the cleanup?"; then
   print_info "Cleanup cancelled by user."
   exit 0
@@ -135,193 +377,137 @@ fi
 # ==============================================
 print_header "iOS DEVELOPER CLEANUP"
 
+# Process developer directories from config
+process_directory_section "$CONFIG_FILE" "developer_directories"
+
 # Xcode check
 if check_command xcrun; then
-  print_subheader "Removing unavailable iOS simulators"
-  print_info "This will remove simulators that are no longer available."
+  # Check if we should clean simulators
+  CLEAN_SIMULATORS=$(jq -r '.device_support.clean_simulators // "true"' "$CONFIG_FILE")
   
-  if confirm "Do you want to remove unavailable simulators?"; then
-    xcrun simctl delete unavailable
-    print_success "Removed unavailable simulators"
-  else
-    print_info "Skipping simulator cleanup"
-  fi
-fi
-
-# CoreSimulator Caches
-print_subheader "Cleaning CoreSimulator Caches"
-CORESIM_CACHES="$HOME/Library/Developer/CoreSimulator/Caches"
-print_size "$CORESIM_CACHES"
-
-if confirm "Do you want to clean CoreSimulator caches? (These will be regenerated as needed)"; then
-  if [ -d "$CORESIM_CACHES" ]; then
-    rm -rf "$CORESIM_CACHES"/* 2>/dev/null
-    if [ $? -eq 0 ]; then
-      print_success "Successfully cleaned CoreSimulator caches"
+  if [ "$CLEAN_SIMULATORS" = "true" ]; then
+    print_subheader "Removing unavailable iOS simulators"
+    print_info "This will remove simulators that are no longer available."
+    
+    if confirm "Do you want to remove unavailable simulators?"; then
+      xcrun simctl delete unavailable
+      print_success "Removed unavailable simulators"
     else
-      print_error "Failed to clean CoreSimulator caches"
+      print_info "Skipping simulator cleanup"
     fi
   else
-    print_info "CoreSimulator Caches directory does not exist. Skipping."
+    print_info "Simulator cleanup disabled in config"
   fi
-else
-  print_info "Skipping CoreSimulator caches cleanup"
-fi
-
-# Xcode Preview Simulator Devices
-PREVIEW_DEVICES="$HOME/Library/Developer/Xcode/UserData/Previews/Simulator Devices"
-print_subheader "Cleaning Xcode Preview Simulator Devices"
-print_size "$PREVIEW_DEVICES"
-
-if confirm "Do you want to clean Xcode Preview Simulator Devices?"; then
-  if [ -d "$PREVIEW_DEVICES" ]; then
-    rm -rf "$PREVIEW_DEVICES"/* 2>/dev/null
-    if [ $? -eq 0 ]; then
-      print_success "Successfully cleaned Xcode Preview Simulator Devices"
-    else
-      print_error "Failed to clean Xcode Preview Simulator Devices"
-    fi
-  else
-    print_info "Xcode Preview Simulator Devices directory does not exist. Skipping."
-  fi
-else
-  print_info "Skipping Xcode Preview Simulator Devices cleanup"
 fi
 
 # iOS Device Support
-IOS_DEVICE_SUPPORT="$HOME/Library/Developer/Xcode/iOS DeviceSupport"
-print_subheader "Cleaning iOS Device Support"
-print_size "$IOS_DEVICE_SUPPORT"
+CLEAN_IOS_DEVICE_SUPPORT=$(jq -r '.device_support.clean_ios_device_support // "true"' "$CONFIG_FILE")
+KEEP_LATEST_IOS=$(jq -r '.device_support.keep_latest_ios_versions // 2' "$CONFIG_FILE")
 
-if [ -d "$IOS_DEVICE_SUPPORT" ]; then
-  echo -e "${BLUE}Available iOS Device Support versions:${NC}"
-  ls -la "$IOS_DEVICE_SUPPORT" | grep -v "^total" | grep -v "^d.*\.\.$"
+if [ "$CLEAN_IOS_DEVICE_SUPPORT" = "true" ]; then
+  IOS_DEVICE_SUPPORT="$HOME/Library/Developer/Xcode/iOS DeviceSupport"
+  print_subheader "Cleaning iOS Device Support"
+  print_size "$IOS_DEVICE_SUPPORT"
   
-  print_warning "It's recommended to keep the latest 2-3 iOS versions you actively develop for."
-  print_info "You'll be asked about each version individually."
-
-  # Process each iOS version
-  for version_dir in "$IOS_DEVICE_SUPPORT"/*; do
-    if [ -d "$version_dir" ]; then
-      version_name=$(basename "$version_dir")
-      version_size=$(du -sh "$version_dir" 2>/dev/null | cut -f1)
+  if [ -d "$IOS_DEVICE_SUPPORT" ]; then
+    echo -e "${BLUE}Available iOS Device Support versions:${NC}"
+    ls -la "$IOS_DEVICE_SUPPORT" | grep -v "^total" | grep -v "^d.*\.\.$"
+    
+    print_info "Config set to keep the latest $KEEP_LATEST_IOS iOS versions."
+    
+    # Get list of directories sorted by modification time (newest last)
+    ios_versions=($(ls -t "$IOS_DEVICE_SUPPORT"))
+    total_versions=${#ios_versions[@]}
+    
+    if [ $total_versions -le $KEEP_LATEST_IOS ]; then
+      print_info "You have $total_versions iOS versions, which is less than or equal to the configured $KEEP_LATEST_IOS to keep. No cleanup needed."
+    else
+      # Calculate versions to remove (all except the latest KEEP_LATEST_IOS)
+      to_remove=$((total_versions - KEEP_LATEST_IOS))
+      print_info "Found $total_versions iOS versions, will remove $to_remove older versions"
       
-      if confirm "Remove iOS Device Support for $version_name (Size: $version_size)?"; then
-        rm -rf "$version_dir" 2>/dev/null
-        if [ $? -eq 0 ]; then
-          print_success "Removed iOS Device Support for $version_name"
+      # Process the older versions (first in the array)
+      for ((i=0; i<$to_remove; i++)); do
+        version_dir="$IOS_DEVICE_SUPPORT/${ios_versions[$i]}"
+        version_name="${ios_versions[$i]}"
+        version_size=$(du -sh "$version_dir" 2>/dev/null | cut -f1)
+        
+        if confirm "Remove iOS Device Support for $version_name (Size: $version_size)?"; then
+          if is_safe_path "$version_dir"; then
+            rm -rf "$version_dir" 2>/dev/null
+            if [ $? -eq 0 ]; then
+              print_success "Removed iOS Device Support for $version_name"
+            else
+              print_error "Failed to remove iOS Device Support for $version_name"
+            fi
+          else
+            print_warning "Skipping $version_dir due to safety check"
+          fi
         else
-          print_error "Failed to remove iOS Device Support for $version_name"
+          print_info "Keeping iOS Device Support for $version_name"
         fi
-      else
-        print_info "Keeping iOS Device Support for $version_name"
-      fi
+      done
     fi
-  done
+  else
+    print_info "iOS Device Support directory does not exist. Skipping."
+  fi
 else
-  print_info "iOS Device Support directory does not exist. Skipping."
+  print_info "iOS Device Support cleanup disabled in config"
 fi
 
 # macOS Device Support
-MACOS_DEVICE_SUPPORT="$HOME/Library/Developer/Xcode/macOS DeviceSupport"
-print_subheader "Cleaning macOS Device Support"
-print_size "$MACOS_DEVICE_SUPPORT"
+CLEAN_MACOS_DEVICE_SUPPORT=$(jq -r '.device_support.clean_macos_device_support // "true"' "$CONFIG_FILE")
+KEEP_LATEST_MACOS=$(jq -r '.device_support.keep_latest_macos_versions // 1' "$CONFIG_FILE")
 
-if [ -d "$MACOS_DEVICE_SUPPORT" ]; then
-  echo -e "${BLUE}Available macOS Device Support versions:${NC}"
-  ls -la "$MACOS_DEVICE_SUPPORT" | grep -v "^total" | grep -v "^d.*\.\.$"
+if [ "$CLEAN_MACOS_DEVICE_SUPPORT" = "true" ]; then
+  MACOS_DEVICE_SUPPORT="$HOME/Library/Developer/Xcode/macOS DeviceSupport"
+  print_subheader "Cleaning macOS Device Support"
+  print_size "$MACOS_DEVICE_SUPPORT"
   
-  print_warning "It's recommended to keep the latest macOS versions you actively develop for."
-  print_info "You'll be asked about each version individually."
-
-  # Process each macOS version
-  for version_dir in "$MACOS_DEVICE_SUPPORT"/*; do
-    if [ -d "$version_dir" ]; then
-      version_name=$(basename "$version_dir")
-      version_size=$(du -sh "$version_dir" 2>/dev/null | cut -f1)
-      
-      if confirm "Remove macOS Device Support for $version_name (Size: $version_size)?"; then
-        rm -rf "$version_dir" 2>/dev/null
-        if [ $? -eq 0 ]; then
-          print_success "Removed macOS Device Support for $version_name"
-        else
-          print_error "Failed to remove macOS Device Support for $version_name"
-        fi
-      else
-        print_info "Keeping macOS Device Support for $version_name"
-      fi
-    fi
-  done
-else
-  print_info "macOS Device Support directory does not exist. Skipping."
-fi
-
-# XCPGDevices
-XCPG_DEVICES="$HOME/Library/Developer/XCPGDevices"
-print_subheader "Cleaning XCPGDevices"
-print_size "$XCPG_DEVICES"
-
-if confirm "Do you want to clean XCPGDevices? (Testing devices)"; then
-  if [ -d "$XCPG_DEVICES" ]; then
-    rm -rf "$XCPG_DEVICES"/* 2>/dev/null
-    if [ $? -eq 0 ]; then
-      print_success "Successfully cleaned XCPGDevices"
-    else
-      print_error "Failed to clean XCPGDevices"
-    fi
-  else
-    print_info "XCPGDevices directory does not exist. Skipping."
-  fi
-else
-  print_info "Skipping XCPGDevices cleanup"
-fi
-
-# Xcode Archives (optional)
-XCODE_ARCHIVES="$HOME/Library/Developer/Xcode/Archives"
-print_subheader "Cleaning Xcode Archives"
-print_size "$XCODE_ARCHIVES"
-
-if [ -d "$XCODE_ARCHIVES" ]; then
-  print_warning "Xcode Archives contain your app build history and may be needed for App Store submissions."
-  if confirm "Do you want to list and potentially clean Xcode Archives?"; then
-    echo -e "${BLUE}Available Xcode Archive folders:${NC}"
-    ls -la "$XCODE_ARCHIVES" | grep -v "^total" | grep -v "^d.*\.\.$"
+  if [ -d "$MACOS_DEVICE_SUPPORT" ]; then
+    echo -e "${BLUE}Available macOS Device Support versions:${NC}"
+    ls -la "$MACOS_DEVICE_SUPPORT" | grep -v "^total" | grep -v "^d.*\.\.$"
     
-    if confirm "Do you want to remove ALL Xcode Archives? (NOT RECOMMENDED unless you're sure)"; then
-      rm -rf "$XCODE_ARCHIVES"/* 2>/dev/null
-      if [ $? -eq 0 ]; then
-        print_success "Removed all Xcode Archives"
-      else
-        print_error "Failed to remove Xcode Archives"
-      fi
+    print_info "Config set to keep the latest $KEEP_LATEST_MACOS macOS versions."
+    
+    # Get list of directories sorted by modification time (newest last)
+    macos_versions=($(ls -t "$MACOS_DEVICE_SUPPORT"))
+    total_versions=${#macos_versions[@]}
+    
+    if [ $total_versions -le $KEEP_LATEST_MACOS ]; then
+      print_info "You have $total_versions macOS versions, which is less than or equal to the configured $KEEP_LATEST_MACOS to keep. No cleanup needed."
     else
-      print_info "Keeping Xcode Archives"
+      # Calculate versions to remove (all except the latest KEEP_LATEST_MACOS)
+      to_remove=$((total_versions - KEEP_LATEST_MACOS))
+      print_info "Found $total_versions macOS versions, will remove $to_remove older versions"
+      
+      # Process the older versions (first in the array)
+      for ((i=0; i<$to_remove; i++)); do
+        version_dir="$MACOS_DEVICE_SUPPORT/${macos_versions[$i]}"
+        version_name="${macos_versions[$i]}"
+        version_size=$(du -sh "$version_dir" 2>/dev/null | cut -f1)
+        
+        if confirm "Remove macOS Device Support for $version_name (Size: $version_size)?"; then
+          if is_safe_path "$version_dir"; then
+            rm -rf "$version_dir" 2>/dev/null
+            if [ $? -eq 0 ]; then
+              print_success "Removed macOS Device Support for $version_name"
+            else
+              print_error "Failed to remove macOS Device Support for $version_name"
+            fi
+          else
+            print_warning "Skipping $version_dir due to safety check"
+          fi
+        else
+          print_info "Keeping macOS Device Support for $version_name"
+        fi
+      done
     fi
   else
-    print_info "Skipping Xcode Archives cleanup"
+    print_info "macOS Device Support directory does not exist. Skipping."
   fi
 else
-  print_info "Xcode Archives directory does not exist. Skipping."
-fi
-
-# Xcode Derived Data
-DERIVED_DATA="$HOME/Library/Developer/Xcode/DerivedData"
-print_subheader "Cleaning Xcode Derived Data"
-print_size "$DERIVED_DATA"
-
-if confirm "Do you want to clean Xcode Derived Data? (Safe to remove)"; then
-  if [ -d "$DERIVED_DATA" ]; then
-    rm -rf "$DERIVED_DATA"/* 2>/dev/null
-    if [ $? -eq 0 ]; then
-      print_success "Successfully cleaned Xcode Derived Data"
-    else
-      print_error "Failed to clean Xcode Derived Data"
-    fi
-  else
-    print_info "Xcode Derived Data directory does not exist. Skipping."
-  fi
-else
-  print_info "Skipping Xcode Derived Data cleanup"
+  print_info "macOS Device Support cleanup disabled in config"
 fi
 
 # ==============================================
@@ -329,81 +515,140 @@ fi
 # ==============================================
 print_header "ANDROID DEVELOPMENT CLEANUP"
 
+# Process android directories from config
+process_directory_section "$CONFIG_FILE" "android_directories"
+
 # Android SDK Build Tools
+CLEAN_BUILD_TOOLS=$(jq -r '.android_sdk.clean_build_tools // "true"' "$CONFIG_FILE")
 ANDROID_SDK="$HOME/Library/Android/sdk"
 ANDROID_BUILD_TOOLS="$ANDROID_SDK/build-tools"
-print_subheader "Cleaning Android SDK Build Tools"
 
-if [ -d "$ANDROID_BUILD_TOOLS" ]; then
+if [ "$CLEAN_BUILD_TOOLS" = "true" ] && [ -d "$ANDROID_BUILD_TOOLS" ]; then
+  print_subheader "Cleaning Android SDK Build Tools"
   print_size "$ANDROID_BUILD_TOOLS"
+  
   echo -e "${BLUE}Available Android Build Tool versions:${NC}"
   ls -la "$ANDROID_BUILD_TOOLS" | grep -v "^total" | grep -v "^d.*\.\.$"
   
   print_warning "It's recommended to keep the latest Android build tools you actively use."
-  print_info "You'll be asked about each version individually."
-
-  # Process each Android build tools version
-  for version_dir in "$ANDROID_BUILD_TOOLS"/*; do
-    if [ -d "$version_dir" ]; then
-      version_name=$(basename "$version_dir")
+  
+  # Get list of directories sorted by modification time (newest last)
+  build_tool_versions=($(ls -t "$ANDROID_BUILD_TOOLS"))
+  total_versions=${#build_tool_versions[@]}
+  
+  # Ask about keeping latest versions
+  print_info "Found $total_versions Android build tool versions"
+  read -p "$(echo -e ${YELLOW}How many of the latest versions do you want to keep? [Default: 2]${NC}) " keep_count
+  
+  # Default to 2 if no input
+  keep_count=${keep_count:-2}
+  
+  if [ $total_versions -le $keep_count ]; then
+    print_info "You have $total_versions build tool versions, which is less than or equal to $keep_count. No cleanup needed."
+  else
+    # Calculate versions to remove (all except the latest keep_count)
+    to_remove=$((total_versions - keep_count))
+    print_info "Will remove $to_remove older build tool versions"
+    
+    # Process the older versions (first in the array)
+    for ((i=0; i<$to_remove; i++)); do
+      version_dir="$ANDROID_BUILD_TOOLS/${build_tool_versions[$i]}"
+      version_name="${build_tool_versions[$i]}"
       version_size=$(du -sh "$version_dir" 2>/dev/null | cut -f1)
       
       if confirm "Remove Android Build Tools version $version_name (Size: $version_size)?"; then
-        rm -rf "$version_dir" 2>/dev/null
-        if [ $? -eq 0 ]; then
-          print_success "Removed Android Build Tools version $version_name"
+        if is_safe_path "$version_dir"; then
+          rm -rf "$version_dir" 2>/dev/null
+          if [ $? -eq 0 ]; then
+            print_success "Removed Android Build Tools version $version_name"
+          else
+            print_error "Failed to remove Android Build Tools version $version_name"
+          fi
         else
-          print_error "Failed to remove Android Build Tools version $version_name"
+          print_warning "Skipping $version_dir due to safety check"
         fi
       else
         print_info "Keeping Android Build Tools version $version_name"
       fi
-    fi
-  done
+    done
+  fi
 else
-  print_info "Android Build Tools directory does not exist. Skipping."
+  if [ "$CLEAN_BUILD_TOOLS" != "true" ]; then
+    print_info "Android Build Tools cleanup disabled in config"
+  elif [ ! -d "$ANDROID_BUILD_TOOLS" ]; then
+    print_info "Android Build Tools directory does not exist. Skipping."
+  fi
 fi
 
 # Android SDK Platforms
+CLEAN_PLATFORMS=$(jq -r '.android_sdk.clean_platforms // "true"' "$CONFIG_FILE")
 ANDROID_PLATFORMS="$ANDROID_SDK/platforms"
-print_subheader "Cleaning Android SDK Platforms"
 
-if [ -d "$ANDROID_PLATFORMS" ]; then
+if [ "$CLEAN_PLATFORMS" = "true" ] && [ -d "$ANDROID_PLATFORMS" ]; then
+  print_subheader "Cleaning Android SDK Platforms"
   print_size "$ANDROID_PLATFORMS"
+  
   echo -e "${BLUE}Available Android Platform versions:${NC}"
   ls -la "$ANDROID_PLATFORMS" | grep -v "^total" | grep -v "^d.*\.\.$"
   
   print_warning "It's recommended to keep the Android platforms you actively target."
-  print_info "You'll be asked about each version individually."
-
-  # Process each Android platform version
-  for version_dir in "$ANDROID_PLATFORMS"/*; do
-    if [ -d "$version_dir" ]; then
-      version_name=$(basename "$version_dir")
+  
+  # Get list of directories sorted by modification time (newest last)
+  platform_versions=($(ls -t "$ANDROID_PLATFORMS"))
+  total_versions=${#platform_versions[@]}
+  
+  # Ask about keeping latest versions
+  print_info "Found $total_versions Android platform versions"
+  read -p "$(echo -e ${YELLOW}How many of the latest versions do you want to keep? [Default: 3]${NC}) " keep_count
+  
+  # Default to 3 if no input
+  keep_count=${keep_count:-3}
+  
+  if [ $total_versions -le $keep_count ]; then
+    print_info "You have $total_versions platform versions, which is less than or equal to $keep_count. No cleanup needed."
+  else
+    # Calculate versions to remove (all except the latest keep_count)
+    to_remove=$((total_versions - keep_count))
+    print_info "Will remove $to_remove older platform versions"
+    
+    # Process the older versions (first in the array)
+    for ((i=0; i<$to_remove; i++)); do
+      version_dir="$ANDROID_PLATFORMS/${platform_versions[$i]}"
+      version_name="${platform_versions[$i]}"
       version_size=$(du -sh "$version_dir" 2>/dev/null | cut -f1)
       
       if confirm "Remove Android Platform $version_name (Size: $version_size)?"; then
-        rm -rf "$version_dir" 2>/dev/null
-        if [ $? -eq 0 ]; then
-          print_success "Removed Android Platform $version_name"
+        if is_safe_path "$version_dir"; then
+          rm -rf "$version_dir" 2>/dev/null
+          if [ $? -eq 0 ]; then
+            print_success "Removed Android Platform $version_name"
+          else
+            print_error "Failed to remove Android Platform $version_name"
+          fi
         else
-          print_error "Failed to remove Android Platform $version_name"
+          print_warning "Skipping $version_dir due to safety check"
         fi
       else
         print_info "Keeping Android Platform $version_name"
       fi
-    fi
-  done
+    done
+  fi
 else
-  print_info "Android Platforms directory does not exist. Skipping."
+  if [ "$CLEAN_PLATFORMS" != "true" ]; then
+    print_info "Android Platforms cleanup disabled in config"
+  elif [ ! -d "$ANDROID_PLATFORMS" ]; then
+    print_info "Android Platforms directory does not exist. Skipping."
+  fi
 fi
 
 # Android SDK System Images
+CLEAN_SYSTEM_IMAGES=$(jq -r '.android_sdk.clean_system_images // "true"' "$CONFIG_FILE")
 ANDROID_SYSTEM_IMAGES="$ANDROID_SDK/system-images"
-print_subheader "Cleaning Android System Images"
 
-if [ -d "$ANDROID_SYSTEM_IMAGES" ]; then
+if [ "$CLEAN_SYSTEM_IMAGES" = "true" ] && [ -d "$ANDROID_SYSTEM_IMAGES" ]; then
+  print_subheader "Cleaning Android System Images"
   print_size "$ANDROID_SYSTEM_IMAGES"
+  
   echo -e "${BLUE}Available Android System Image folders:${NC}"
   find "$ANDROID_SYSTEM_IMAGES" -type d -mindepth 2 -maxdepth 2 | sort
   
@@ -421,11 +666,15 @@ if [ -d "$ANDROID_SYSTEM_IMAGES" ]; then
             image_size=$(du -sh "$image_type_dir" 2>/dev/null | cut -f1)
             
             if confirm "Remove Android $android_ver system image type $image_type (Size: $image_size)?"; then
-              rm -rf "$image_type_dir" 2>/dev/null
-              if [ $? -eq 0 ]; then
-                print_success "Removed Android $android_ver system image type $image_type"
+              if is_safe_path "$image_type_dir"; then
+                rm -rf "$image_type_dir" 2>/dev/null
+                if [ $? -eq 0 ]; then
+                  print_success "Removed Android $android_ver system image type $image_type"
+                else
+                  print_error "Failed to remove Android system image"
+                fi
               else
-                print_error "Failed to remove Android system image"
+                print_warning "Skipping $image_type_dir due to safety check"
               fi
             else
               print_info "Keeping Android $android_ver system image type $image_type"
@@ -438,47 +687,11 @@ if [ -d "$ANDROID_SYSTEM_IMAGES" ]; then
     print_info "Skipping Android System Images cleanup"
   fi
 else
-  print_info "Android System Images directory does not exist. Skipping."
-fi
-
-# Android cache
-ANDROID_CACHE="$HOME/.android/cache"
-print_subheader "Cleaning Android Cache"
-print_size "$ANDROID_CACHE"
-
-if confirm "Do you want to clean Android cache?"; then
-  if [ -d "$ANDROID_CACHE" ]; then
-    rm -rf "$ANDROID_CACHE"/* 2>/dev/null
-    if [ $? -eq 0 ]; then
-      print_success "Successfully cleaned Android cache"
-    else
-      print_error "Failed to clean Android cache"
-    fi
-  else
-    print_info "Android Cache directory does not exist. Skipping."
+  if [ "$CLEAN_SYSTEM_IMAGES" != "true" ]; then
+    print_info "Android System Images cleanup disabled in config"
+  elif [ ! -d "$ANDROID_SYSTEM_IMAGES" ]; then
+    print_info "Android System Images directory does not exist. Skipping."
   fi
-else
-  print_info "Skipping Android cache cleanup"
-fi
-
-# Gradle cache
-GRADLE_CACHE="$HOME/.gradle/caches"
-print_subheader "Cleaning Gradle Cache"
-print_size "$GRADLE_CACHE"
-
-if confirm "Do you want to clean Gradle cache? (Will be downloaded again as needed)"; then
-  if [ -d "$GRADLE_CACHE" ]; then
-    rm -rf "$GRADLE_CACHE"/* 2>/dev/null
-    if [ $? -eq 0 ]; then
-      print_success "Successfully cleaned Gradle cache"
-    else
-      print_error "Failed to clean Gradle cache"
-    fi
-  else
-    print_info "Gradle Cache directory does not exist. Skipping."
-  fi
-else
-  print_info "Skipping Gradle cache cleanup"
 fi
 
 # ==============================================
@@ -486,33 +699,13 @@ fi
 # ==============================================
 print_header "GENERAL CACHE CLEANUP"
 
-# Array of cache directories to clean
-CACHE_DIRS=(
-  "$HOME/Library/Caches/Google:Google Cache (Chrome, etc.)"
-  "$HOME/Library/Caches/Yarn:Yarn Package Manager Cache"
-  "$HOME/Library/Caches/org.swift.swiftpm:Swift Package Manager Cache"
-  "$HOME/Library/Caches/argmax-sdk-swift:Argmax SDK Swift Cache"
-  "$HOME/Library/Caches/typescript:TypeScript Cache"
-  "$HOME/Library/Caches/Arc:Arc Browser Cache"
-  "$HOME/Library/Caches/com.tinyspeck.slackmacgap.ShipIt:Slack Updater Cache"
-  "$HOME/Library/Caches/com.spotify.client:Spotify Cache"
-  "$HOME/Library/Caches/Adobe:Adobe Cache"
-  "$HOME/Library/Caches/Adobe Camera Raw 2:Adobe Camera Raw Cache"
-  "$HOME/Library/Caches/com.apple.amp.itmstransporter:iTunes Transporter Cache"
-  "$HOME/Library/Caches/node-gyp:Node Gyp Cache"
-  "$HOME/Library/Caches/loom-updater:Loom Updater Cache"
-  "$HOME/Library/Caches/@trezorsuite-desktop-updater:Trezor Suite Updater Cache"
-  "$HOME/Library/Caches/pip:Python pip Cache"
-  "$HOME/Library/Caches/go-build:Go Build Cache"
-)
-
-for cache_entry in "${CACHE_DIRS[@]}"; do
-  IFS=':' read -r cache_dir cache_desc <<< "$cache_entry"
-  clean_directory "$cache_dir" "$cache_desc"
-done
+# Process cache directories from config
+process_directory_section "$CONFIG_FILE" "cache_directories"
 
 # Homebrew cache (using brew command)
-if check_command brew; then
+CLEAN_HOMEBREW=$(jq -r '.cache_tools.clean_homebrew // "true"' "$CONFIG_FILE")
+
+if [ "$CLEAN_HOMEBREW" = "true" ] && check_command brew; then
   print_subheader "Cleaning Homebrew Cache"
   
   if confirm "Do you want to clean Homebrew cache? (This frees up space from old package versions)"; then
@@ -526,10 +719,18 @@ if check_command brew; then
   else
     print_info "Skipping Homebrew cache cleanup"
   fi
+else
+  if [ "$CLEAN_HOMEBREW" != "true" ]; then
+    print_info "Homebrew cleanup disabled in config"
+  elif ! command -v brew &> /dev/null; then
+    print_info "Homebrew not installed. Skipping."
+  fi
 fi
 
 # CocoaPods cache (using pod command)
-if check_command pod; then
+CLEAN_COCOAPODS=$(jq -r '.cache_tools.clean_cocoapods // "true"' "$CONFIG_FILE")
+
+if [ "$CLEAN_COCOAPODS" = "true" ] && check_command pod; then
   print_subheader "Cleaning CocoaPods Cache"
   
   if confirm "Do you want to clean CocoaPods cache?"; then
@@ -543,6 +744,12 @@ if check_command pod; then
   else
     print_info "Skipping CocoaPods cache cleanup"
   fi
+else
+  if [ "$CLEAN_COCOAPODS" != "true" ]; then
+    print_info "CocoaPods cleanup disabled in config"
+  elif ! command -v pod &> /dev/null; then
+    print_info "CocoaPods not installed. Skipping."
+  fi
 fi
 
 # ==============================================
@@ -551,59 +758,18 @@ fi
 print_header "APPLICATION SUPPORT CLEANUP (SELECTIVE)"
 print_warning "This section is more selective - only clean folders you're sure about"
 
-# Array of potential application support directories to clean
-APP_SUPPORT_DIRS=(
-  "$HOME/Library/Application Support/Caches:Application Support Cache Folder"
-  "$HOME/Library/Application Support/Google:Google Application Data"
-  "$HOME/Library/Application Support/rambox:Rambox Application Data"
-  "$HOME/Library/Application Support/Slack:Slack Application Data"
-  "$HOME/Library/Application Support/MacWhisper:MacWhisper Application Data"
-)
+# Process application support directories from config
+process_directory_section "$CONFIG_FILE" "application_support_directories"
 
-for app_entry in "${APP_SUPPORT_DIRS[@]}"; do
-  IFS=':' read -r app_dir app_desc <<< "$app_entry"
+# ==============================================
+# 5. Custom Directories Cleanup
+# ==============================================
+CUSTOM_DIRS_SECTION_EXISTS=$(jq 'has("custom_directories")' "$CONFIG_FILE")
+
+if [ "$CUSTOM_DIRS_SECTION_EXISTS" = "true" ]; then
+  print_header "CUSTOM DIRECTORIES CLEANUP"
+  print_info "Processing custom directories from configuration file"
   
-  if [ -d "$app_dir" ]; then
-    print_subheader "Reviewing $app_desc"
-    print_size "$app_dir"
-    print_warning "Cleaning this might affect application settings or cached data"
-    
-    if confirm "Do you want to REVIEW $app_dir contents? (No deletion yet)"; then
-      echo -e "${BLUE}Contents of $app_dir:${NC}"
-      ls -la "$app_dir" | head -n 20
-      
-      if [[ $(ls -A "$app_dir" | wc -l) -gt 20 ]]; then
-        echo -e "${YELLOW}... and more files (showing first 20 only)${NC}"
-      fi
-      
-      if confirm "Do you want to DELETE contents of $app_dir? (USE WITH CAUTION)"; then
-        rm -rf "$app_dir"/* 2>/dev/null
-        if [ $? -eq 0 ]; then
-          print_success "Successfully cleaned $app_dir"
-        else
-          print_error "Failed to clean $app_dir"
-        fi
-      else
-        print_info "Skipping deletion of $app_dir contents"
-      fi
-    else
-      print_info "Skipping review of $app_dir"
-    fi
-  else
-    print_info "$app_dir does not exist. Skipping."
-  fi
-done
-
-# ==============================================
-# Final summary
-# ==============================================
-print_header "CLEANUP COMPLETE"
-print_info "Disk cleanup process has finished."
-print_info "To see how much space was freed, run:"
-echo -e "${GREEN}df -h${NC}"
-
-print_warning "Remember that some applications may need to rebuild their caches when next launched."
-print_warning "Some developer tools may need to download components again when used."
-
-echo ""
-echo -e "${MAGENTA}Thank you for using the Mac Disk Space Cleanup Script!${NC}"
+  process_directory_section "$CONFIG_FILE" "custom_directories"
+else
+  print_info "No custom directories specified in config.
