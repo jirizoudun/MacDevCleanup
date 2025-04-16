@@ -263,6 +263,26 @@ load_config() {
 }
 
 # ==============================================
+# Helper Functions
+# ==============================================
+get_sorted_directories() {
+  local dir="$1"
+  local pattern="$2"
+  
+  # Use find to get directories and sort by modification time
+  find "$dir" -maxdepth 1 -type d -name "*" -exec stat -f "%m %N" {} \; | \
+    sort -nr | \
+    cut -d' ' -f2- | \
+    while IFS= read -r line; do
+      # Get just the basename and check if it matches the pattern
+      basename=$(basename "$line")
+      if [[ "$basename" =~ $pattern ]]; then
+        echo "$basename"
+      fi
+    done
+}
+
+# ==============================================
 # Cleanup Functions
 # ==============================================
 clean_directory() {
@@ -455,7 +475,11 @@ clean_ios_device_support() {
       print_info "Config set to keep the latest $KEEP_LATEST_IOS iOS versions."
       
       # Get list of directories sorted by modification time (newest last)
-      ios_versions=($(ls -t "$IOS_DEVICE_SUPPORT"))
+      ios_versions=()
+      while IFS= read -r line; do
+        ios_versions+=("$line")
+      done < <(get_sorted_directories "$IOS_DEVICE_SUPPORT" '^iPhone[0-9]+,[0-9]+ [0-9]+\.[0-9]+ \([0-9A-Z]+\)$')
+      print_info "Available iOS Device Support versions: ${ios_versions[@]}"
       total_versions=${#ios_versions[@]}
       
       if [ $total_versions -le $KEEP_LATEST_IOS ]; then
@@ -511,7 +535,11 @@ clean_macos_device_support() {
       print_info "Config set to keep the latest $KEEP_LATEST_MACOS macOS versions."
       
       # Get list of directories sorted by modification time (newest last)
-      macos_versions=($(ls -t "$MACOS_DEVICE_SUPPORT"))
+      macos_versions=()
+      while IFS= read -r line; do
+        macos_versions+=("$line")
+      done < <(get_sorted_directories "$MACOS_DEVICE_SUPPORT" '^[0-9]+\.[0-9]+$')
+      print_info "Available macOS Device Support versions: ${macos_versions[@]}"
       total_versions=${#macos_versions[@]}
       
       if [ $total_versions -le $KEEP_LATEST_MACOS ]; then
