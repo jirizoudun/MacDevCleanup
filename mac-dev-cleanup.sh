@@ -13,8 +13,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration file path
-CONFIG_FILE="$HOME/.mac-cleanup-config.json"
-DEFAULT_CONFIG_FILE="./mac-cleanup-config.json"
+CONFIG_FILE="$HOME/.mac-dev-cleanup-config.json"
+DEFAULT_CONFIG_FILE="./mac-dev-cleanup-config.json"
 
 # Functions
 print_header() {

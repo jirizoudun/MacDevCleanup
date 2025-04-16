@@ -1,4 +1,4 @@
-# 🧹 mac-cleanup
+# 🧹 mac-dev-cleanup
 
 A safe, interactive disk space cleanup tool for macOS developers.
 
@@ -11,7 +11,7 @@ This open-source Bash script helps you identify and remove stale caches, build a
 ## ✨ Features
 
 - 🧠 Smart safety checks to avoid dangerous paths (e.g., `/`, `~/Documents`, etc.)
-- 🔧 Customizable config via `~/.mac-cleanup-config.json` or a local file
+- 🔧 Customizable config via `~/.mac-dev-cleanup-config.json` or a local file
 - 📁 Targets iOS and Android development artifacts, caches, archives, and more
 - 🧼 Interactive prompts before deleting anything
 - 🗂 Configurable keep-count for simulators, build tools, platforms
@@ -25,10 +25,10 @@ This open-source Bash script helps you identify and remove stale caches, build a
 There’s no installation — just clone and run:
 
 ```bash
-git clone https://github.com/yourusername/mac-cleanup.git
-cd mac-cleanup
-chmod +x mac-cleanup.sh
-./mac-cleanup.sh
+git clone https://github.com/jirizoudun/MacDevCleanup.git
+cd mac-dev-cleanup
+chmod +x mac-dev-cleanup.sh
+./mac-dev-cleanup.sh
 ```
 
 ---
@@ -38,13 +38,13 @@ chmod +x mac-cleanup.sh
 On first run, the script will offer to create a default config file at:
 
 ```
-~/.mac-cleanup-config.json
+~/.mac-dev-cleanup-config.json
 ```
 
 Or you can provide your own:
 
 ```bash
-./mac-cleanup.sh ./my-cleanup-config.json
+./mac-dev-cleanup.sh ./my-cleanup-config.json
 ```
 
 The config allows you to enable/disable individual cleanup sections, set how many versions to keep, and even add your own custom directories.

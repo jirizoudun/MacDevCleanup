@@ -1,4 +1,4 @@
-# Contributing to mac-cleanup
+# Contributing to mac-dev-cleanup
 
 Thanks for your interest in contributing! This project is made for developers, by developers. Whether you're fixing a bug, suggesting a new cleanup rule, or just improving the docs — you're welcome here.
 
@@ -12,7 +12,7 @@ Thanks for your interest in contributing! This project is made for developers, b
    git checkout -b your-feature-name
    ```
 
-2. **Make your changes** to `mac-cleanup.sh`, `README.md`, or the config structure.
+2. **Make your changes** to `mac-dev-cleanup.sh`, `README.md`, or the config structure.
 
 3. **Test your changes** locally:
 
@@ -49,7 +49,7 @@ To add a new cleanup section:
 ]
 ```
 
-2. **Update `mac-cleanup.sh`**:
+2. **Update `mac-dev-cleanup.sh`**:
 
    - Add a new call to `process_directory_section "$CONFIG_FILE" "my_custom_cleanup"` under an appropriate header.
    - Use the existing format as reference for headers and color-coded logs.
