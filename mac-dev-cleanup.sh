@@ -3,6 +3,9 @@
 # Mac Disk Space Cleanup Script
 # Interactive script with confirmations, colored output and config file support
 
+# Global variables
+DRY_RUN=false
+
 # Color definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -70,6 +73,66 @@ check_command() {
     print_error "$1 command not found. Skipping related cleanup steps."
     return 1
   fi
+  return 0
+}
+
+safe_delete() {
+  local type="$1"
+  local target="$2"
+  local description="$3"
+  local command="$4"
+
+  if [ "$DRY_RUN" = true ]; then
+    if [ -n "$command" ]; then
+      print_info "[DRY RUN] Would run: $command"
+    else
+      print_info "[DRY RUN] Would remove $type: $target"
+    fi
+    return 0
+  fi
+
+  # Prevent deletion of symlinks
+  if [[ "$type" != "command" && -L "$target" ]]; then
+    print_warning "Skipping symlink target: $target"
+    return 1
+  fi
+
+  case "$type" in
+    "file")
+      if [ ! -f "$target" ]; then
+        print_warning "File does not exist: $target"
+        return 1
+      fi
+      rm -f "$target" 2>/dev/null || return 1
+      ;;
+    "directory")
+      if [[ -z "$target" || "$target" == "/" ]]; then
+        print_error "Invalid or dangerous directory path: '$target'"
+        return 1
+      fi
+      shopt -s nullglob dotglob
+      files=("$target"/*)
+      if (( ${#files[@]} )); then
+        rm -rf "${files[@]}" 2>/dev/null || return 1
+      else
+        print_info "$target is already empty."
+      fi
+      shopt -u nullglob dotglob
+      ;;
+    "command")
+      if [ -z "$command" ]; then
+        print_error "No command specified"
+        return 1
+      fi
+      eval "$command" || return 1
+      return 0
+      ;;
+    *)
+      print_error "Invalid deletion type: $type"
+      return 1
+      ;;
+  esac
+
   return 0
 }
 
@@ -314,8 +377,7 @@ clean_directory() {
         print_error "Invalid or empty directory path: '$dir'. Skipping."
         return
       fi
-      rm -rf "$dir"/* 2>/dev/null
-      if [ $? -eq 0 ]; then
+      if safe_delete "directory" "$dir" "$description"; then
         print_success "Successfully cleaned $dir"
       else
         print_error "Failed to clean $dir"
@@ -348,8 +410,7 @@ clean_file() {
   ls -lh "$file" 2>/dev/null
   
   if confirm "Do you want to remove $file?"; then
-    rm -f "$file" 2>/dev/null
-    if [ $? -eq 0 ]; then
+    if safe_delete "file" "$file" "$description"; then
       print_success "Successfully removed $file"
     else
       print_error "Failed to remove $file"
@@ -449,8 +510,11 @@ clean_simulators() {
     print_info "This will remove simulators that are no longer available."
     
     if confirm "Do you want to remove unavailable simulators?"; then
-      xcrun simctl delete unavailable
-      print_success "Removed unavailable simulators"
+      if safe_delete "command" "" "unavailable simulators" "xcrun simctl delete unavailable"; then
+        print_success "Removed unavailable simulators"
+      else
+        print_error "Failed to remove unavailable simulators"
+      fi
     else
       print_info "Skipping simulator cleanup"
     fi
@@ -497,8 +561,7 @@ clean_ios_device_support() {
           
           if confirm "Remove iOS Device Support for $version_name (Size: $version_size)?"; then
             if is_safe_path "$version_dir"; then
-              rm -rf "$version_dir" 2>/dev/null
-              if [ $? -eq 0 ]; then
+              if safe_delete "directory" "$version_dir" "iOS Device Support for $version_name"; then
                 print_success "Removed iOS Device Support for $version_name"
               else
                 print_error "Failed to remove iOS Device Support for $version_name"
@@ -557,8 +620,7 @@ clean_macos_device_support() {
           
           if confirm "Remove macOS Device Support for $version_name (Size: $version_size)?"; then
             if is_safe_path "$version_dir"; then
-              rm -rf "$version_dir" 2>/dev/null
-              if [ $? -eq 0 ]; then
+              if safe_delete "directory" "$version_dir" "macOS Device Support for $version_name"; then
                 print_success "Removed macOS Device Support for $version_name"
               else
                 print_error "Failed to remove macOS Device Support for $version_name"
@@ -622,8 +684,7 @@ clean_android_build_tools() {
         
         if confirm "Remove Android Build Tools version $version_name (Size: $version_size)?"; then
           if is_safe_path "$version_dir"; then
-            rm -rf "$version_dir" 2>/dev/null
-            if [ $? -eq 0 ]; then
+            if safe_delete "directory" "$version_dir" "Android Build Tools version $version_name"; then
               print_success "Removed Android Build Tools version $version_name"
             else
               print_error "Failed to remove Android Build Tools version $version_name"
@@ -684,8 +745,7 @@ clean_android_platforms() {
         
         if confirm "Remove Android Platform $version_name (Size: $version_size)?"; then
           if is_safe_path "$version_dir"; then
-            rm -rf "$version_dir" 2>/dev/null
-            if [ $? -eq 0 ]; then
+            if safe_delete "directory" "$version_dir" "Android Platform $version_name"; then
               print_success "Removed Android Platform $version_name"
             else
               print_error "Failed to remove Android Platform $version_name"
@@ -733,8 +793,7 @@ clean_android_system_images() {
               
               if confirm "Remove Android $android_ver system image type $image_type (Size: $image_size)?"; then
                 if is_safe_path "$image_type_dir"; then
-                  rm -rf "$image_type_dir" 2>/dev/null
-                  if [ $? -eq 0 ]; then
+                  if safe_delete "directory" "$image_type_dir" "Android $android_ver system image type $image_type"; then
                     print_success "Removed Android $android_ver system image type $image_type"
                   else
                     print_error "Failed to remove Android system image"
@@ -771,9 +830,7 @@ clean_homebrew_cache() {
     print_subheader "Cleaning Homebrew Cache"
     
     if confirm "Do you want to clean Homebrew cache? (This frees up space from old package versions)"; then
-      echo -e "${BLUE}Running brew cleanup...${NC}"
-      brew cleanup -s
-      if [ $? -eq 0 ]; then
+      if safe_delete "command" "" "Homebrew cache" "brew cleanup -s"; then
         print_success "Successfully cleaned Homebrew cache"
       else
         print_error "Failed to clean Homebrew cache"
@@ -797,9 +854,7 @@ clean_cocoapods_cache() {
     print_subheader "Cleaning CocoaPods Cache"
     
     if confirm "Do you want to clean CocoaPods cache?"; then
-      echo -e "${BLUE}Running pod cache clean...${NC}"
-      pod cache clean --all
-      if [ $? -eq 0 ]; then
+      if safe_delete "command" "" "CocoaPods cache" "pod cache clean --all"; then
         print_success "Successfully cleaned CocoaPods cache"
       else
         print_error "Failed to clean CocoaPods cache"
@@ -824,11 +879,21 @@ main() {
   print_info "This script will help you clean up disk space on your Mac."
   print_warning "It will ask for confirmation before deleting any files."
   
-  # Check if a custom config file was specified
-  if [ "$1" != "" ]; then
-    CONFIG_FILE="$1"
-    print_info "Using custom configuration file: $CONFIG_FILE"
-  fi
+  # Parse command line arguments
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --dry-run)
+        DRY_RUN=true
+        print_info "Running in DRY RUN mode - no files will be deleted"
+        shift
+        ;;
+      *)
+        CONFIG_FILE="$1"
+        print_info "Using custom configuration file: $CONFIG_FILE"
+        shift
+        ;;
+    esac
+  done
   
   # Load configuration
   if ! load_config "$CONFIG_FILE"; then
@@ -849,7 +914,11 @@ main() {
   clean_custom_directories
   
   print_header "CLEANUP COMPLETE"
-  print_success "All cleanup operations have been completed."
+  if [ "$DRY_RUN" = true ]; then
+    print_info "This was a DRY RUN - no files were actually deleted"
+  else
+    print_success "All cleanup operations have been completed."
+  fi
 }
 
 # Run the main function
