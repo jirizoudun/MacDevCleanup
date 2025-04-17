@@ -6,6 +6,24 @@ This open-source Bash script helps you identify and remove stale caches, build a
 
 > Built for developers who want to keep control of their environment without running random one-liners from Stack Overflow.
 
+## ⚠️ Important Warning
+
+**This script does not guarantee the safety of your data.** It is designed for experienced developers who:
+
+- Understand what each cleanup step does
+- Know the implications of deleting development artifacts
+- Can assess the impact on their development environment
+- Are familiar with the directories being cleaned
+
+Due to its configurability, the script:
+
+- Cannot handle all potentially risky cases
+- Is not designed to be fool-proof
+- May have unintended consequences if misconfigured
+- Requires careful review of the directories being targeted
+
+**Always review the configuration and understand what will be deleted before running the script.**
+
 ---
 
 ## ✨ Features
@@ -19,6 +37,7 @@ This open-source Bash script helps you identify and remove stale caches, build a
 - 💬 Colored output and human-friendly messages
 - 🔍 Size reporting for directories before cleanup
 - 🛡️ Path validation and user confirmation for external directories
+- 🔄 Dry-run mode to preview changes without actual deletion
 
 ---
 
@@ -47,6 +66,14 @@ Or you can provide your own:
 
 ```bash
 ./mac-dev-cleanup.sh ./my-cleanup-config.json
+```
+
+You can also run in dry-run mode to preview changes without actually deleting anything:
+
+```bash
+./mac-dev-cleanup.sh --dry-run
+# or with a custom config
+./mac-dev-cleanup.sh --dry-run ./my-cleanup-config.json
 ```
 
 The config allows you to enable/disable individual cleanup sections, set how many versions to keep, and even add your own custom directories.
