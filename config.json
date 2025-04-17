@@ -1,0 +1,163 @@
+{
+  "cache_directories": [
+    {
+      "path": "~/Library/Caches/Google",
+      "description": "Google Cache (Chrome, etc.)",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/Yarn",
+      "description": "Yarn Package Manager Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/org.swift.swiftpm",
+      "description": "Swift Package Manager Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/argmax-sdk-swift",
+      "description": "Argmax SDK Swift Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/typescript",
+      "description": "TypeScript Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/Arc",
+      "description": "Arc Browser Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/com.tinyspeck.slackmacgap.ShipIt",
+      "description": "Slack Updater Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/com.spotify.client",
+      "description": "Spotify Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/Adobe",
+      "description": "Adobe Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/Adobe Camera Raw 2",
+      "description": "Adobe Camera Raw Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/node-gyp",
+      "description": "Node Gyp Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/pip",
+      "description": "Python pip Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/go-build",
+      "description": "Go Build Cache",
+      "enabled": true
+    }
+  ],
+  "developer_directories": [
+    {
+      "path": "~/Library/Developer/CoreSimulator/Caches",
+      "description": "iOS Simulator Caches",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Developer/Xcode/DerivedData",
+      "description": "Xcode Derived Data",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Developer/Xcode/Archives",
+      "description": "Xcode Archives",
+      "enabled": false
+    },
+    {
+      "path": "~/Library/Developer/XCPGDevices",
+      "description": "Xcode Testing Devices",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Developer/Xcode/UserData/Previews/Simulator Devices",
+      "description": "Xcode Preview Simulator Devices",
+      "enabled": true
+    }
+  ],
+  "application_support_directories": [
+    {
+      "path": "~/Library/Application Support/Caches",
+      "description": "Application Support Cache Folder",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Application Support/Google",
+      "description": "Google Application Data",
+      "enabled": false
+    },
+    {
+      "path": "~/Library/Application Support/rambox",
+      "description": "Rambox Application Data",
+      "enabled": false
+    },
+    {
+      "path": "~/Library/Application Support/Slack",
+      "description": "Slack Application Data",
+      "enabled": false
+    },
+    {
+      "path": "~/Library/Application Support/MacWhisper",
+      "description": "MacWhisper Application Data",
+      "enabled": false
+    }
+  ],
+  "android_directories": [
+    {
+      "path": "~/.android/cache",
+      "description": "Android Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/.gradle/caches",
+      "description": "Gradle Cache",
+      "enabled": true
+    }
+  ],
+  "custom_directories": [
+    {
+      "path": "~/Downloads/Temp",
+      "description": "Temporary Download Files",
+      "enabled": true
+    },
+    {
+      "path": "~/Projects/temp-builds",
+      "description": "Temporary Project Builds",
+      "enabled": false
+    }
+  ],
+  "device_support": {
+    "clean_simulators": true,
+    "clean_ios_device_support": true,
+    "keep_latest_ios_versions": 2,
+    "clean_macos_device_support": true,
+    "keep_latest_macos_versions": 1
+  },
+  "android_sdk": {
+    "clean_build_tools": true,
+    "clean_platforms": true,
+    "clean_system_images": true
+  },
+  "cache_tools": {
+    "clean_homebrew": true,
+    "clean_cocoapods": true
+  }
+}
