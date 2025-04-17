@@ -15,14 +15,16 @@ This open-source Bash script helps you identify and remove stale caches, build a
 - 📁 Targets iOS and Android development artifacts, caches, archives, and more
 - 🧼 Interactive prompts before deleting anything
 - 🗂 Configurable keep-count for simulators, build tools, platforms
-- ✅ Dependency-aware (warns if `jq`, `brew`, or `pod` are missing)
+- ✅ Dependency-aware (warns if `jq`, `brew`, `pod`, or `xcrun` are missing)
 - 💬 Colored output and human-friendly messages
+- 🔍 Size reporting for directories before cleanup
+- 🛡️ Path validation and user confirmation for external directories
 
 ---
 
 ## 📦 Installation
 
-There’s no installation — just clone and run:
+There's no installation — just clone and run:
 
 ```bash
 git clone https://github.com/jirizoudun/MacDevCleanup.git
@@ -55,14 +57,87 @@ Example snippet:
 {
   "cache_directories": [
     {
+      "path": "~/Library/Caches/Google",
+      "description": "Google Cache (Chrome, etc.)",
+      "enabled": true
+    },
+    {
       "path": "~/Library/Caches/Yarn",
       "description": "Yarn Package Manager Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/org.swift.swiftpm",
+      "description": "Swift Package Manager Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/typescript",
+      "description": "TypeScript Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Caches/Arc",
+      "description": "Arc Browser Cache",
+      "enabled": true
+    }
+  ],
+  "developer_directories": [
+    {
+      "path": "~/Library/Developer/CoreSimulator/Caches",
+      "description": "iOS Simulator Caches",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Developer/Xcode/DerivedData",
+      "description": "Xcode Derived Data",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Developer/Xcode/Archives",
+      "description": "Xcode Archives",
+      "enabled": false
+    },
+    {
+      "path": "~/Library/Developer/XCPGDevices",
+      "description": "Xcode Testing Devices",
+      "enabled": true
+    }
+  ],
+  "application_support_directories": [
+    {
+      "path": "~/Library/Application Support/Caches",
+      "description": "Application Support Cache Folder",
+      "enabled": true
+    },
+    {
+      "path": "~/Library/Application Support/Google",
+      "description": "Google Application Data",
+      "enabled": false
+    }
+  ],
+  "android_directories": [
+    {
+      "path": "~/.android/cache",
+      "description": "Android Cache",
+      "enabled": true
+    },
+    {
+      "path": "~/.gradle/caches",
+      "description": "Gradle Cache",
       "enabled": true
     }
   ],
   "device_support": {
     "clean_ios_device_support": true,
-    "keep_latest_ios_versions": 2
+    "keep_latest_ios_versions": 2,
+    "clean_macos_device_support": true,
+    "keep_latest_macos_versions": 1
+  },
+  "android_sdk": {
+    "clean_build_tools": true,
+    "clean_platforms": true,
+    "clean_system_images": true
   }
 }
 ```
@@ -94,6 +169,9 @@ This script is built with safety as the top priority:
 - Clear stale Android SDK versions
 - Clean out years-old caches from various tools
 - Automate environment hygiene across your dev team
+- Manage iOS and macOS device support files
+- Clean up Android build tools and system images
+- Remove old Xcode archives and derived data
 
 ---
 
@@ -117,7 +195,7 @@ Want to contribute a new cleanup section? See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 📜 License
 
-MIT License — do whatever you want, but don’t blame us if you delete your thesis. The script includes safeguards, but you’re still responsible for using it wisely.
+MIT License — do whatever you want, but don't blame us if you delete your thesis. The script includes safeguards, but you're still responsible for using it wisely.
 
 ---
 
